@@ -1,0 +1,214 @@
+configfile: "config.yaml"
+
+PROJ = config["proj_name"]
+INPUTDIR = config["raw_data"]
+SCRATCH = config["scratch"]
+OUTPUTDIR = config["outputDIR"]
+METADATA = config["metadata"]
+SUF = config["suffix"]
+R1_SUF = str(config["r1_suf"])
+R2_SUF = str(config["r2_suf"])
+RAREFACTION_DEPTH = config["rarefaction_depth"]
+TAXONOMY_DB = config["taxonomy_db"]
+TAXA_EXCLUDE = config["taxa_exclude"]
+PHY_PREFIX = config["phy_prefix"]
+JOBS = config["n_jobs"]
+
+rule all:
+  input:
+    #ASV outputs:
+    table = SCRATCH + "/qiime2/asv/" + PROJ + "-asv-table.qza",
+    rep = SCRATCH + "/qiime2/asv/" + PROJ + "-rep-seqs.qza",
+    stats = SCRATCH + "/qiime2/asv/" + PROJ + "-stats-dada2.qza",
+    stats_viz = SCRATCH + "/qiime2/asv/" + PROJ + "-stats-dada2.qzv",
+    table_viz = SCRATCH + "/qiime2/asv/" + PROJ + "-visualize-asv-table.qzv",
+    repseqs_viz = SCRATCH + "/qiime2/asv/" + PROJ + "-visualize-repseqs.qzv",
+    align = SCRATCH + "/qiime2/asv/" + PROJ + "-aligned-seqs.qza",
+    masked = SCRATCH + "/qiime2/asv/" + PROJ + "-masked-aligned-seqs.qza",
+    tree = SCRATCH + "/qiime2/asv/" + PROJ + "-unrooted-tree.qza",
+    rooted_tree = SCRATCH + "/qiime2/asv/" + PROJ + "-rooted-tree.qza",
+    #rare_viz = SCRATCH + "/qiime2/asv/" + PROJ + "-alpha-rarefaction-curve.qzv"
+    taxonomy = SCRATCH + "/qiime2/asv/" + PROJ + "-taxonomy.qza",
+    taxonomy_vis = SCRATCH + "/qiime2/asv/" + PROJ + "-taxonomy.qzv",
+    filtered_asvs = SCRATCH + "/qiime2/asv/" + PROJ + "-nomito-nochloro-asv-table.qza",
+    filtered_asvs_phylum = SCRATCH + "/qiime2/asv/" + PROJ + "-nomito-nochloro-phylum-asv-table.qza",
+    final_viz = SCRATCH + "/qiime2/asv/" + PROJ + "-nomito-nochloro-phylum-asv-table.qzv"
+
+
+# Dada2
+rule dada2:
+  input:
+    q2_primerRM = SCRATCH + "/qiime2/" + PROJ + "-PE-demux.qza"
+  output:
+    table = SCRATCH + "/qiime2/asv/" + PROJ + "-asv-table.qza",
+    rep = SCRATCH + "/qiime2/asv/" + PROJ + "-rep-seqs.qza",
+    stats = SCRATCH + "/qiime2/asv/" + PROJ + "-stats-dada2.qza"
+  log:
+    SCRATCH + "/qiime2/logs/" + PROJ + "_dada2_q2.log"
+  shell:
+    "qiime dada2 denoise-paired \
+        --i-demultiplexed-seqs {input.q2_primerRM} \
+        --p-trim-left-f {config[trim_len-f]} \
+	    --p-trim-left-r {config[trim_len-r]} \
+        --p-trunc-len-f {config[truncation_len-f]} \
+        --p-trunc-len-r {config[truncation_len-r]} \
+        --p-n-reads-learn {config[training]} \
+        --o-table {output.table} \
+        --o-representative-sequences {output.rep} \
+        --o-denoising-stats {output.stats} \
+        --p-n-threads {config[thread_num]}"
+
+# generate Dada2 stats
+rule dada2_stats:
+  input:
+    stats = SCRATCH + "/qiime2/asv/" + PROJ + "-stats-dada2.qza"
+  output:
+    stats_viz = SCRATCH + "/qiime2/asv/" + PROJ + "-stats-dada2.qzv"
+  log:
+    SCRATCH + "/qiime2/logs/" + PROJ + "_dada2-stats_q2.log"
+  shell:
+   "qiime metadata tabulate \
+       --m-input-file {input.stats} \
+       --o-visualization {output.stats_viz}"
+
+# visualize the feature table
+rule dada2_visualize:
+    input:
+        asvs = SCRATCH + "/qiime2/asv/" + PROJ + "-asv-table.qza",
+        metadata = METADATA
+    output:
+        table_viz = SCRATCH + "/qiime2/asv/" + PROJ + "-visualize-asv-table.qzv"
+    log:
+      SCRATCH + "/qiime2/logs/" + PROJ + "_dada2-vis_q2.log"
+    shell:"qiime feature-table summarize \
+        --i-table {input.asvs} \
+        --o-visualization {output.table_viz} \
+        --m-sample-metadata-file {input.metadata}"
+
+# visualize the representative sequences
+rule repseqs_visualize:
+    input:
+        seqs = SCRATCH + "/qiime2/asv/" + PROJ + "-rep-seqs.qza"
+    output:
+        repseqs_viz = SCRATCH + "/qiime2/asv/" + PROJ + "-visualize-repseqs.qzv"
+    log:
+      SCRATCH + "/qiime2/logs/" + PROJ + "repseqs-vis_q2.log"
+    shell:"qiime feature-table tabulate-seqs \
+        --i-data {input.seqs} \
+        --o-visualization {output.repseqs_viz}"
+
+#aligning sequences
+rule phylogenetic_tree:
+    input:
+        seqs = SCRATCH + "/qiime2/asv/" + PROJ + "-rep-seqs.qza"
+    output:
+        align = SCRATCH + "/qiime2/asv/" + PROJ + "-aligned-seqs.qza"
+    log:
+       SCRATCH + "/qiime2/logs/" + PROJ + "alignment_q2.log"
+    shell:"qiime alignment mafft \
+        --i-sequences {input.seqs} \
+        --o-alignment {output.align}"
+
+# mask/ filter alignment to remove highly variable positions
+rule mask_tree:
+    input:
+        align = SCRATCH + "/qiime2/asv/" + PROJ + "-aligned-seqs.qza"
+    output:
+        masked = SCRATCH + "/qiime2/asv/" + PROJ + "-masked-aligned-seqs.qza"
+    log:
+       SCRATCH + "/qiime2/logs/" + PROJ + "mask_q2.log"
+    shell:"qiime alignment mask \
+	       --i-alignment {input.align} \
+	       --o-masked-alignment {output.masked}"
+
+# Create a tree using FastTree
+rule fasttree:
+    input:
+        align = SCRATCH + "/qiime2/asv/" + PROJ + "-aligned-seqs.qza"
+    output:
+        tree = SCRATCH + "/qiime2/asv/" + PROJ + "-unrooted-tree.qza"
+    log:
+       SCRATCH + "/qiime2/logs/" + PROJ + "tree_q2.log"
+    shell:"qiime phylogeny fasttree \
+            --i-alignment {input.align} \
+            --o-tree {output.tree}"
+
+# root the tree!
+rule root_tree:
+    input:
+        tree = SCRATCH + "/qiime2/asv/" + PROJ + "-unrooted-tree.qza"
+    output:
+        rooted_tree = SCRATCH + "/qiime2/asv/" + PROJ + "-rooted-tree.qza"
+    log:
+       SCRATCH + "/qiime2/logs/" + PROJ + "root_tree_q2.log"
+    shell: "qiime phylogeny midpoint-root \
+            --i-tree {input.tree} \
+            --o-rooted-tree {output.rooted_tree}"
+
+# assign taxonomy
+rule assign_taxonomy:
+    input:
+      classifier = TAXONOMY_DB,
+      rep = SCRATCH + "/qiime2/asv/" + PROJ + "-rep-seqs.qza"
+    output:
+      taxonomy = SCRATCH + "/qiime2/asv/" + PROJ + "-taxonomy.qza"
+    log:
+      SCRATCH + "/qiime2/logs/" + PROJ + "-taxonomy.log"
+    shell: "qiime feature-classifier classify-sklearn \
+            --i-classifier {TAXONOMY_DB} \
+            --i-reads {input.rep} \
+            --o-classification {output.taxonomy}"
+
+  # visualize taxonomy
+rule visualize_taxonomy:
+    input:
+        taxonomy = SCRATCH + "/qiime2/asv/" + PROJ + "-taxonomy.qza"
+    output:
+        taxonomy_vis = SCRATCH + "/qiime2/asv/" + PROJ + "-taxonomy.qzv"
+    log:
+        SCRATCH + "/qiime2/logs/" + PROJ + "-taxonomy-viz.log"
+    shell: "qiime metadata tabulate \
+            --m-input-file {input.taxonomy} \
+            --o-visualization {output.taxonomy_vis}"
+
+# filter mitochondria and chloroplasts
+rule filter_mito_chloro:
+    input:
+        asvs = SCRATCH + "/qiime2/asv/" + PROJ + "-asv-table.qza",
+        taxonomy = SCRATCH + "/qiime2/asv/" + PROJ + "-taxonomy.qza"
+    output:
+        filtered_asvs = SCRATCH + "/qiime2/asv/" + PROJ + "-nomito-nochloro-asv-table.qza"
+    log:
+        SCRATCH + "/qiime2/logs/" " PROJ" + "-filter-table.log"
+    shell: "qiime taxa filter-table \
+            --i-table {input.asvs} \
+            --i-taxonomy {input.taxonomy} \
+            --p-exclude {TAXA_EXCLUDE} \
+            --o-filtered-table {output.filtered_asvs}"
+
+rule filter_no_phylum:
+    input:
+        filtered_asvs = SCRATCH + "/qiime2/asv/" + PROJ + "-nomito-nochloro-asv-table.qza",
+        taxonomy = SCRATCH + "/qiime2/asv/" + PROJ + "-taxonomy.qza"
+    output:
+        filtered_asvs_phylum = SCRATCH + "/qiime2/asv/" + PROJ + "-nomito-nochloro-phylum-asv-table.qza"
+    log:
+        SCRATCH + "/qiime2/logs/" + PROJ + "-filter-table-2.log"
+    shell: "qiime taxa filter-table \
+            --i-table {input.filtered_asvs} \
+            --i-taxonomy {input.taxonomy} \
+            --p-include {PHY_PREFIX} \
+            --o-filtered-table {output.filtered_asvs_phylum}"
+
+rule final_table_viz:
+    input:
+        filtered_asvs_phylum = SCRATCH + "/qiime2/asv/" + PROJ + "-nomito-nochloro-phylum-asv-table.qza",
+        metadata = METADATA
+    output:
+        final_viz = SCRATCH + "/qiime2/asv/" + PROJ + "-nomito-nochloro-phylum-asv-table.qzv"
+    log:
+        SCRATCH + "/qiime2/logs/" + PROJ + "-filter-table-2-viz.log"
+    shell: "qiime feature-table summarize \
+        --i-table {input.filtered_asvs_phylum} \
+        --o-visualization {output.final_viz} \
+        --m-sample-metadata-file {input.metadata}"

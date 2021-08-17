@@ -1,0 +1,45 @@
+configfile: "config.yaml"
+
+PROJ = config["proj_name"]
+INPUTDIR = config["raw_data"]
+SCRATCH = config["scratch"]
+OUTPUTDIR = config["outputDIR"]
+METADATA = config["metadata"]
+SUF = config["suffix"]
+R1_SUF = str(config["r1_suf"])
+R2_SUF = str(config["r2_suf"])
+RAREFACTION_DEPTH = config["rarefaction_depth"]
+
+rule all:
+  input:
+    # QIIME2 outputs
+    q2_import = SCRATCH + "/qiime2/" + PROJ + "-PE-demux.qza",
+    q2_quality = SCRATCH + "/qiime2/" + PROJ + "-quality-summary.qzv"
+
+# Import CasavaOneEightSingleLanePerSampleDirFmt
+rule import_qiime:
+  input:
+    INPUTDIR
+  output:
+    q2_import = SCRATCH + "/qiime2/" + PROJ + "-PE-demux.qza"
+  log:
+    SCRATCH + "/qiime2/logs/" + PROJ + "_q2.log"
+  shell:
+   "qiime tools import \
+       --type 'SampleData[PairedEndSequencesWithQuality]' \
+       --input-path {input} \
+       --output-path {output.q2_import} \
+       --input-format CasavaOneEightSingleLanePerSampleDirFmt"
+
+# summarize quality to determine trimming parameters
+rule visualize_quality:
+  input:
+    q2_primerRM = SCRATCH + "/qiime2/" + PROJ + "-PE-demux.qza"
+  output:
+    q2_quality = SCRATCH + "/qiime2/" + PROJ + "-quality-summary.qzv"
+  log:
+    SCRATCH + "/qiime2/logs/" + PROJ + "_q2.log"
+  shell:
+    "qiime demux summarize \
+      --i-data {input.q2_primerRM} \
+      --o-visualization {output.q2_quality}"
