@@ -1,3 +1,6 @@
+
+# adapted from: https://github.com/shu251/tagseq-qiime2-snakemake
+
 proj_name: RedPanda16S
 raw_data: /home/centos/USS/cew-redpanda/16S/raw_reads_only
 scratch:  /home/centos/USS/cew-redpanda/16S/SMWorkingDirectory
