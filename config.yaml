@@ -5,8 +5,6 @@ proj_name: RedPanda16S
 raw_data: /home/centos/USS/cew-redpanda/16S/raw_reads_only
 scratch:  /home/centos/USS/cew-redpanda/16S/SMWorkingDirectory
 outputDIR: /home/centos/USS/cew-redpanda/16S/SMWorkingDirectory
-manifest: /home/centos/USS/cew-redpanda/16S/manifest
-manifest-trimmed: manifest-trimmed.txt
 metadata: /home/centos/USS/cew-redpanda/16S/RedPandaMetadataValidated.tsv
 taxonomy_db: /home/centos/USS/Bioinfotools_USS/QIIME2/silva-138-99-nb-classifier.qza
 
@@ -20,22 +18,6 @@ suffix: _001.fastq.gz
 r1_suf: R1
 r2_suf: R2
 
-# QIIME2-specific flags
-# Defaults for amplicon tag-sequencing - uncomment only parameters you need.
-
-
-## 16S default (Parada et al. modified EMP primers)
-#primerF: GTGYCAGCMGCCGCGGTAA
-#primerR: GGACTACNVGGGTWTCTAAT
-# Parada et al. 2016 MEP primers for 16S
-#primer_err: 0.1
-#primer_overlap: 3
-# Merging reads for 16S
-#minoverlap: 20
-#maxdiff: 4
-#minlength: 200
-
-
 ## DADA2 - ASV flags
 truncation_err: 2
 truncation_len-f: 240
@@ -48,7 +30,7 @@ chimera: pooled
 thread_num: 0
 
 ## taxonomy assignment
-n_jobs: -2
+n_jobs: 0
 
 ## rarefaction depths
 rarefaction_depth: 1000 # put number here
